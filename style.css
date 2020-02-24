@@ -1,0 +1,17 @@
+body {
+    font-family: Georgia, serif;
+    color: #444;
+    margin: auto;
+    max-width: 50em;
+    line-height: 1.5em;
+    padding: 4em 1em;
+}
+
+h1, h2, strong {
+    color: #222;
+}
+
+canvas {
+    margin: auto;
+    display: block;
+}
