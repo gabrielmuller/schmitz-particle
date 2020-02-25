@@ -1,8 +1,38 @@
-let ctx = document.getElementById("demo").getContext('2d');
 const S = document.body.offsetWidth * 0.7; // S is shorthand for size
-ctx.canvas.width  = S;
-ctx.canvas.height  = S;
-Object.getPrototypeOf(ctx).circle = (x, y, r) => ctx.arc(x, y, r, 0, Math.PI * 2);
+function circle(ctx, x, y, r) {
+    ctx.arc(x, y, r, 0, Math.PI * 2); 
+}
+const headLength = S * 0.02;
+const headAngle = 0.6;
+function arrow(ctx, ox, oy, tx, ty)  {
+    let dx = tx - ox;
+    let dy = ty - oy;
+    let angle = Math.atan2(dy, dx);
+    let lineCap = ctx.lineCap;
+
+    ctx.lineCap = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(ox, oy);
+    ctx.lineTo(tx, ty);
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(
+        tx - Math.cos(angle - headAngle) * headLength,
+        ty - Math.sin(angle - headAngle) * headLength
+    );
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(
+        tx - Math.cos(angle + headAngle) * headLength,
+        ty - Math.sin(angle + headAngle) * headLength
+    );
+    ctx.moveTo(tx, ty);
+    ctx.stroke();
+    ctx.lineCap = lineCap;
+}
+
+let ctx = document.getElementById("demo").getContext('2d');
+ctx.canvas.width = S;
+ctx.canvas.height = S;
 
 let cellSize = S * 0.8;
 let cellStart = (S - cellSize) / 2;
@@ -37,12 +67,13 @@ function draw() {
     [cellStart, cellEnd].forEach((x, _) => {
         [cellStart, cellEnd].forEach((y, _) => {
             ctx.beginPath();
-            ctx.circle(x, y, 0.04 * S);
+            circle(ctx, x, y, 0.04 * S);
             ctx.fill();
             ctx.stroke()
         });
     });
 
-    pos++;
+    ctx.lineWidth = S * 0.006;
+    //arrow(ctx, Math.abs(Math.sin(pos)) * S*0.4, cellStart, cellEnd, Math.abs(Math.cos(pos)*S*0.2));
     //window.requestAnimationFrame(draw);
 }
