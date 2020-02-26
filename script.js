@@ -1,4 +1,4 @@
-const S = document.body.offsetWidth * 0.7; // S is shorthand for size
+const S = document.body.offsetWidth * 1; // S is shorthand for size
 function circle(ctx, x, y, r) {
     ctx.arc(x, y, r, 0, Math.PI * 2); 
 }
@@ -47,7 +47,7 @@ let ctx = document.getElementById("demo").getContext('2d');
 ctx.canvas.width = S;
 ctx.canvas.height = S;
 
-let cellSize = S * 0.65;
+let cellSize = S * 0.5;
 let cellStart = (S - cellSize) / 2;
 let cellEnd = cellStart + cellSize;
 
@@ -64,14 +64,6 @@ class Hermite {
         this.setAxis(ax, ay);
     }
 
-    get posX() {
-        return this.ox + this.ax * this.t * cellSize;
-    }
-
-    get posY() {
-        return this.oy + this.ay * this.t * cellSize;
-    }
-
     setNormal(nx, ny) {
         const length = Math.sqrt(nx*nx + ny*ny);
         this.nx = nx / length;
@@ -84,16 +76,25 @@ class Hermite {
         this.ay = ay / length;
     }
 
-    distanceTo(x, y) {
+    update() {
+        this.posX = this.ox + this.ax * this.t * cellSize;
+        this.posY = this.oy + this.ay * this.t * cellSize;
+        this.d = this.posX*this.nx+this.posY*this.ny;
+    }
 
+    vectorTo(x, y) {
+        let dist = x*this.nx +
+                   y*this.ny - this.d;
+        return [this.nx * dist,
+                this.ny * dist];
     }
 }
 
 let input = [
-    new Hermite(cellStart, cellStart, 1, 0),
-    new Hermite(cellStart, cellEnd, 0, -1),
-    //new Hermite(0.5, cellEnd, cellStart, -1, 0),
-    //new Hermite(0.5, cellEnd, cellEnd, 0, -1),
+    new Hermite(cellStart, cellStart, 0, 1),
+    new Hermite(cellStart, cellEnd, 1, 0),
+    new Hermite(cellEnd, cellStart, -1, 0),
+    new Hermite(cellEnd, cellEnd, 0, -1),
 ];
 
 function draw() {
@@ -130,26 +131,47 @@ function draw() {
     ctx.lineWidth = S * 0.006;
     input[0].setNormal(Math.sin(p), Math.cos(p));
     input[1].setNormal(Math.sin(p * 1.618), Math.cos(p * 1.618));
+    input[2].setNormal(0.3, 0.7);
+    input[3].setNormal(-0.3, -0.7);
     input[0].t = Math.abs(Math.sin(p));
     input[1].t = Math.abs(Math.cos(p));
-    console.log(input[0].t);
-    let sumX = 0;
-    let sumY = 0;
+    input[3].t = 0.7;
+    input[2].t = 0.7;
+    let centerX = 0;
+    let centerY = 0;
     input.forEach((hermite, _) => {
+        hermite.update();
+        console.log(hermite);
         normalPlane(ctx, hermite.posX, hermite.posY, hermite.nx, hermite.ny);
-        sumX += hermite.posX;
-        sumY += hermite.posY;
+        centerX += hermite.posX;
+        centerY += hermite.posY;
+    });
+    ctx.strokeStyle = 'darkgreen';
+
+    [cellStart, cellEnd].forEach((x, _) => {
+        [cellStart, cellEnd].forEach((y, _) => {
+            sumX = 0;
+            sumY = 0;
+            input.forEach((hermite, _) => {
+                ctx.lineWidth = 3;
+                const [vx, vy] = hermite.vectorTo(x, y);
+                arrow(ctx, x, y, -vx, -vy);
+                sumX -= vx;
+                sumY -= vy;
+            });
+            ctx.lineWidth = 6;
+            arrow(ctx, x, y, sumX, sumY);
+        });
     });
 
-    sumX /= input.length;
-    sumY /= input.length;
+    centerX /= input.length;
+    centerY /= input.length;
 
-    ctx.fillStyle = 'green';
+    ctx.fillStyle = 'red';
     ctx.strokeStyle = '#222';
     ctx.beginPath();
-    circle(ctx, sumX, sumY, S * 0.01);
+    circle(ctx, centerX, centerY, S * 0.01);
     ctx.fill();
-    ctx.stroke();
 
     
     p += 0.01;
