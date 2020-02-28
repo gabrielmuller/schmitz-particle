@@ -11,6 +11,7 @@ let normalLength = 0;
 let cellSize = 0;
 let cellStart = 0;
 let cellEnd = 0;
+let mousePos = {x: 0, y: 0};
 
 let resize = () => {
     rect = document.getElementById("container").getBoundingClientRect();
@@ -28,7 +29,9 @@ let resize = () => {
 window.onresize = resize;
 
 function circle(ctx, x, y, r) {
+    ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2); 
+    ctx.fill();
 }
 
 function arrow(ctx, ox, oy, dx, dy, lengthRatio = 1)  {
@@ -62,9 +65,7 @@ function arrow(ctx, ox, oy, dx, dy, lengthRatio = 1)  {
 function normalPlane(ctx, ox, oy, nx, ny, showPlane=true) {
     ctx.strokeStyle = 'darkslateblue';
     ctx.fillStyle = 'darkslateblue';
-    ctx.beginPath();
     circle(ctx, ox, oy, S * 0.01);
-    ctx.fill();
     arrow(ctx, ox, oy, nx * normalLength, ny * normalLength);
     if (!showPlane) return;
     ctx.strokeStyle = '#2222FF90';
@@ -234,6 +235,18 @@ function nextStep() {
 
 nextStep();
 
+function getMousePos(canvas, evt) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: evt.clientX - rect.left,
+      y: evt.clientY - rect.top
+    };
+}
+
+document.onmousemove = function (e) {
+    mousePos = getMousePos(canvas, e);
+};
+
 function draw() {
     animating = true;
     ctx.clearRect(0, 0, S, S);
@@ -288,9 +301,7 @@ function draw() {
     [cellStart, cellEnd].forEach((x, i) => {
         [cellStart, cellEnd].forEach((y, j) => {
             if (st.partial || st.toPlane) {
-                ctx.beginPath();
                 circle(ctx, x, y, S * 0.01);
-                ctx.fill();
             }
             let k = i * 2 + j;
             ctx.lineWidth = 2;
@@ -329,9 +340,7 @@ function draw() {
     ctx.fillStyle = 'crimson';
 
     if (st.centroid) {
-        ctx.beginPath();
         circle(ctx, centerX, centerY, S * 0.004);
-        ctx.fill();
     }
 
 
@@ -358,18 +367,25 @@ function draw() {
         centerY += forceY;
         centerX = Math.min(Math.max(centerX, cellStart), cellEnd);
         centerY = Math.min(Math.max(centerY, cellStart), cellEnd);
-        ctx.beginPath();
         circle(ctx, centerX, centerY, S * 0.004);
-        ctx.fill();
     }
 
-    
+    mousePos.x = Math.min(cellEnd, Math.max(cellStart, mousePos.x));
+    mousePos.y = Math.min(cellEnd, Math.max(cellStart, mousePos.y));
+
+    dists = [cellStart - mousePos.x,
+             cellEnd - mousePos.x,
+             cellStart - mousePos.y,
+             cellEnd - mousePos.y];
+
+
     if (st.animate || st.iterative) {
         p += 0.005;
         window.requestAnimationFrame(draw);
     } else {
         animating = false;
     }
+
 }
 
 function redraw() { if (!animating) draw() };
