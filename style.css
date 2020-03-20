@@ -19,7 +19,6 @@ h1, h2 {
 
 .step {
     display: none;
-    min-height: 10em;
 }
 
 h1, h2, strong {
@@ -29,7 +28,7 @@ h1, h2, strong {
 #text {
     margin: 3em;
     flex-shrink: 1;
-    flex-basis: 40em;
+    flex-basis: 30em;
 }
 
 canvas {
@@ -38,21 +37,30 @@ canvas {
 }
 
 button {
-    float: right;
-    color: #eee;
-    background-color: crimson;
     padding: 0.8em;
     margin: 1.2em 0.5em 0em 0.5em;
     display: inline-block;
-    font-weight: bold;
     text-decoration: none;
     border: none;
     font-size: inherit;
     font-family: inherit;
 
     box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-
 }
+
+.next {
+    float: right;
+    color: #eee;
+    font-weight: bold;
+    background-color: crimson;
+}
+
+.prev {
+    float: left;
+    color: #333;
+    background-color: #eee;
+}
+
 #container {
     margin: 3em;
     flex-basis: 30em;

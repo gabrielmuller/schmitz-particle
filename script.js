@@ -1,3 +1,4 @@
+"use strict"
 const canvas = document.getElementById("display");
 const ctx = canvas.getContext('2d');
 const headAngle = 0.6;
@@ -11,10 +12,10 @@ let normalLength = 0;
 let cellSize = 0;
 let cellStart = 0;
 let cellEnd = 0;
-let mousePos = {x: 0, y: 0};
+let mousePos = new Vector(0, 0);
 
-let resize = () => {
-    rect = document.getElementById("container").getBoundingClientRect();
+function resize() {
+    let rect = document.getElementById("container").getBoundingClientRect();
     S = rect.width;
     ctx.canvas.width = S;
     ctx.canvas.height = S;
@@ -28,16 +29,24 @@ let resize = () => {
 
 window.onresize = resize;
 
-function circle(ctx, x, y, r) {
+function circle(ctx, center, r) {
     ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2); 
+    ctx.arc(center.x, center.y, r, 0, Math.PI * 2); 
     ctx.fill();
 }
 
-function arrow(ctx, ox, oy, dx, dy, lengthRatio = 1)  {
-    let tx = ox + dx;
-    let ty = oy + dy;
-    let angle = Math.atan2(dy, dx);
+function moveTo(ctx, v) {
+    ctx.moveTo(v.x, v.y);
+}
+
+function lineTo(ctx, v) {
+    ctx.lineTo(v.x, v.y);
+}
+
+
+function arrow(ctx, origin, direction, lengthRatio = 1)  {
+    let target = origin.add(direction);
+    let angle = direction.angle();
     let lineCap = ctx.lineCap;
 
 
@@ -45,41 +54,45 @@ function arrow(ctx, ox, oy, dx, dy, lengthRatio = 1)  {
     ctx.lineCap = 'round';
 
     ctx.beginPath();
-    ctx.moveTo(ox, oy);
-    ctx.lineTo(tx, ty);
-    ctx.moveTo(tx, ty);
+    moveTo(ctx, origin);
+    lineTo(ctx, target);
+    moveTo(ctx, target);
     ctx.lineTo(
-        tx - Math.cos(angle - headAngle) * hl,
-        ty - Math.sin(angle - headAngle) * hl
+        target.x - Math.cos(angle - headAngle) * hl,
+        target.y - Math.sin(angle - headAngle) * hl
     );
-    ctx.moveTo(tx, ty);
+    moveTo(ctx, target);
     ctx.lineTo(
-        tx - Math.cos(angle + headAngle) * hl,
-        ty - Math.sin(angle + headAngle) * hl
+        target.x - Math.cos(angle + headAngle) * hl,
+        target.y - Math.sin(angle + headAngle) * hl
     );
-    ctx.moveTo(tx, ty);
+    moveTo(ctx, target);
     ctx.stroke();
     ctx.lineCap = lineCap;
 }
 
-function normalPlane(ctx, ox, oy, nx, ny, showPlane=true) {
+function normalPlane(ctx, origin, normal, showPlane=true) {
     ctx.strokeStyle = 'darkslateblue';
     ctx.fillStyle = 'darkslateblue';
-    circle(ctx, ox, oy, S * 0.01);
-    arrow(ctx, ox, oy, nx * normalLength, ny * normalLength);
+    circle(ctx, origin, S * 0.01);
+    arrow(ctx, origin, normal.mul(normalLength));
+
     if (!showPlane) return;
+
     ctx.strokeStyle = '#2222FF90';
     ctx.fillStyle = '#2222FF40';
+
     ctx.beginPath();
-    const px = ny;
-    const py = -nx;
-    ctx.moveTo(ox - px * 2*S, oy - py * 2*S);
-    ctx.lineTo(ox + px * 2*S, oy + py * 2*S);
+
+    const plane = normal.perpendicular();
+    const start = origin.sub(plane.mul(S));
+    const end = origin.add(plane.mul(S));
+    moveTo(ctx, start);
+    lineTo(ctx, end);
     ctx.stroke();
 }
 
 let p = 1;
-
 
 const steps = [
     {
@@ -158,7 +171,7 @@ const steps = [
         "partial": true,
         "centroid": true,
         "forceCount": 32,
-        "interp": false,
+        "interp": true,
         "iterative": true,
         "animate": false,
     },
@@ -175,72 +188,77 @@ const steps = [
 ]
 
 class Hermite {
-    constructor(ox, oy, ax, ay) {
+    constructor(origin, axis) {
         this.t = 0;
-        this.ox = ox;
-        this.oy = oy;
-        this.setNormal(1, 1);
-        this.setAxis(ax, ay);
+        this.origin = origin;
+        this.normal = new Vector(Math.random() - 0.5, Math.random() - 0.5);
+        this.axis = axis;
     }
 
-    setNormal(nx, ny) {
-        const length = Math.sqrt(nx*nx + ny*ny);
-        this.nx = nx / length;
-        this.ny = ny / length;
+    get normal() { return this._normal };
+
+    get axis() { return this._axis };
+
+    set normal(n) {
+        this._normal = n.normalized();
     }
 
-    setAxis(ax, ay) {
-        const length = Math.sqrt(ax*ax + ay*ay);
-        this.ax = ax / length;
-        this.ay = ay / length;
+    set axis(a) {
+        this._axis = a.normalized();
     }
 
     update() {
-        this.posX = cellStart + this.ox * cellSize + this.ax * this.t * cellSize;
-        this.posY = cellStart + this.oy * cellSize + this.ay * this.t * cellSize;
-        this.d = this.posX*this.nx+this.posY*this.ny;
+        let start = new Vector(cellStart, cellStart);
+        this.pos = start
+                .add(this.origin.mul(cellSize))
+                .add(this.axis.mul(this.t * cellSize));
+        this.d = this.pos.dot(this.normal);
     }
 
-    vectorTo(x, y) {
-        let dist = x*this.nx +
-                   y*this.ny - this.d;
-        return [this.nx * dist,
-                this.ny * dist];
+    vectorTo(v) {
+        let distance = v.dot(this.normal) - this.d;
+        return this.normal.mul(distance);
     }
 }
 
 let input = [
-    new Hermite(0, 0, 0, 1),
-    new Hermite(0, 1, 1, 0),
-    new Hermite(1, 0, -1, 0),
-    new Hermite(1, 1, 0, -1),
+    new Hermite(new Vector(0, 0), new Vector(0, 1)),
+    new Hermite(new Vector(0, 1), new Vector(1, 0)),
+    new Hermite(new Vector(1, 0), new Vector(-1, 0)),
+    new Hermite(new Vector(1, 1), new Vector(0, -1)),
 ];
 
 const strength = Math.sqrt(0.05);
 
-let step = 0;
-let st;
+let url = new URL(window.location.href);
+var step = 0;
 
-function nextStep() {
-    if (step >= steps.length) return;
+function changeStep(newStep) {
+    if (newStep >= steps.length || newStep < 0) newStep = 0;
+    /*
     if (step > 0) {
         document.getElementById('s' + (step-1)).style.display = "none";
     }
-    document.getElementById('s' + step).style.display = "block";
-    st = steps[step]
-    step++;
+    */
+    document.getElementById('s' + step).style.display = "none";
+    document.getElementById('s' + newStep).style.display = "block";
+    window.history.pushState(null, '', "?step=" + newStep);
     p = 0;
+    step = newStep;
     redraw();
 }
 
-nextStep();
+let nextStep = () => changeStep(step + 1);
+let prevStep = () => changeStep(step - 1);
+
+changeStep(parseInt(url.searchParams.get("step") || 0, 10));
 
 function getMousePos(canvas, evt) {
     var rect = canvas.getBoundingClientRect();
-    return {
-      x: evt.clientX - rect.left,
-      y: evt.clientY - rect.top
-    };
+    return new Vector(
+        evt.clientX - rect.left,
+        evt.clientY - rect.top
+    );
 }
 
 document.onmousemove = function (e) {
@@ -249,6 +267,10 @@ document.onmousemove = function (e) {
 
 function draw() {
     animating = true;
+    let st = steps[step];
+    console.log(step);
+    console.log(steps);
+
     ctx.clearRect(0, 0, S, S);
     ctx.strokeStyle = '#888';
     ctx.lineWidth = Math.round(S * 0.005);
@@ -270,113 +292,108 @@ function draw() {
 
     ctx.lineWidth = S * 0.006;
     if (st.animate) {
-        input[0].setNormal(Math.sin(p), Math.cos(p));
-        input[1].setNormal(Math.sin(p * 1.618), Math.cos(p * 1.618));
-        input[2].setNormal(Math.sin(p * 1.618 * 0.1), Math.cos(p * 1.618 * 0.8));
-        input[3].setNormal(Math.sin(p * 1.618 * 0.01), Math.cos(p * 1.618) * 0.02);
+        input[0].normal = new Vector(Math.sin(p), Math.cos(p));
+        input[1].normal = new Vector(Math.sin(p * 1.618), Math.cos(p * 1.618));
+        input[2].normal = new Vector(Math.sin(p * 1.618 * 0.1), Math.cos(p * 1.618 * 0.8));
+        input[3].normal = new Vector(Math.sin(p * 1.618 * 0.01), Math.cos(p * 1.618) * 0.02);
         input[0].t = Math.abs(Math.sin(p));
         input[1].t = Math.abs(Math.cos(p));
         input[3].t = Math.abs(Math.sin(p * 0.1518));
         input[2].t = Math.abs(Math.cos(p * 0.4683));
     }
-    let centerX = 0;
-    let centerY = 0;
+    let center = new Vector(0, 0);
     ctx.lineWidth = 3;
+
     input.forEach((hermite, _) => {
         hermite.update();
-        normalPlane(ctx, hermite.posX, hermite.posY, hermite.nx, hermite.ny, st.plane);
-        centerX += hermite.posX;
-        centerY += hermite.posY;
+        normalPlane(ctx, hermite.pos, hermite.normal, st.plane);
+        center = center.add(hermite.pos);
     });
 
-    centerX /= input.length;
-    centerY /= input.length;
+    center = center.div(input.length);
 
-    let partialForcesX = [0, 0, 0, 0];
-    let partialForcesY = [0, 0, 0, 0];
+    let partialForces = [];
+    for (let i = 0; i < 4; i++) partialForces[i] = new Vector(0, 0);
 
     ctx.strokeStyle = 'green';
     ctx.fillStyle = 'green';
 
     [cellStart, cellEnd].forEach((x, i) => {
         [cellStart, cellEnd].forEach((y, j) => {
+            let corner = new Vector(x, y);
             if (st.partial || st.toPlane) {
-                circle(ctx, x, y, S * 0.01);
+                circle(ctx, corner, S * 0.01);
             }
             let k = i * 2 + j;
             ctx.lineWidth = 2;
             input.forEach((hermite, _) => {
-                const [vx, vy] = hermite.vectorTo(x, y);
+                const v = hermite.vectorTo(corner);
                 if (st.toPlane) {
-                    arrow(ctx, x, y, -vx, -vy);
+                    arrow(ctx, corner, v.mul(-1));
                 }
-                partialForcesX[k] -= vx;
-                partialForcesY[k] -= vy;
+                partialForces[k] = partialForces[k].sub(v);
             });
             ctx.lineWidth = 4;
-            partialForcesX[k] *= strength;
-            partialForcesY[k] *= strength;
+            partialForces[k] = partialForces[k].mul(strength);
             if (st.partial) {
-                arrow(ctx, x, y, partialForcesX[k], partialForcesY[k]);
+                arrow(ctx, corner, partialForces[k]);
             }
         });
     });
 
     ctx.lineWidth = 2;
-    if (st.interp) {
-        ctx.strokeStyle = "#aaa";
-        ctx.beginPath();
-
-        ctx.moveTo(cellStart, centerY);
-        ctx.lineTo(cellEnd, centerY);
-
-        ctx.moveTo(centerX, cellStart);
-        ctx.lineTo(centerX, cellEnd);
-
-        ctx.stroke();
-    }
 
     ctx.strokeStyle = 'crimson';
     ctx.fillStyle = 'crimson';
 
     if (st.centroid) {
-        circle(ctx, centerX, centerY, S * 0.004);
+        circle(ctx, center, S * 0.004);
     }
 
 
     let forceCount = st.forceCount;
+
     if (st.iterative) {
         const period = 2;
         forceCount *= (p % period) / period;
     }
+
     for (let i = 0; i < forceCount; i++) {
-        forceX = 0;
-        forceY = 0;
+        let force = new Vector(0, 0);
         [cellStart, cellEnd].forEach((x, i) => {
             [cellStart, cellEnd].forEach((y, j) => {
                 let k = i * 2 + j;
-                let area = (1-Math.abs(centerX-x)/cellSize) * (1-Math.abs(centerY-y)/cellSize)
-                forceX += partialForcesX[k] * area;
-                forceY += partialForcesY[k] * area;
+                let area = (1-Math.abs(center.x-x)/cellSize) * (1-Math.abs(center.y-y)/cellSize)
+                force = force.add(partialForces[k].mul(area));
             });
         });
 
-        arrow(ctx, centerX, centerY, forceX, forceY, 0.5);
+        arrow(ctx, center, force, 0.5);
 
-        centerX += forceX;
-        centerY += forceY;
-        centerX = Math.min(Math.max(centerX, cellStart), cellEnd);
-        centerY = Math.min(Math.max(centerY, cellStart), cellEnd);
-        circle(ctx, centerX, centerY, S * 0.004);
+        center = center.add(force);
+        center = center.clamp(cellStart, cellEnd); 
+        circle(ctx, center, S * 0.004);
     }
 
-    mousePos.x = Math.min(cellEnd, Math.max(cellStart, mousePos.x));
-    mousePos.y = Math.min(cellEnd, Math.max(cellStart, mousePos.y));
+    if (st.interp) {
+        ctx.strokeStyle = "#aaa";
+        ctx.beginPath();
 
-    dists = [cellStart - mousePos.x,
-             cellEnd - mousePos.x,
-             cellStart - mousePos.y,
-             cellEnd - mousePos.y];
+        ctx.moveTo(cellStart, center.y);
+        ctx.lineTo(cellEnd, center.y);
+
+        ctx.moveTo(center.x, cellStart);
+        ctx.lineTo(center.x, cellEnd);
+
+        ctx.stroke();
+    }
+
+    mousePos = mousePos.clamp(cellStart, cellEnd);
+
+    let dists = [cellStart - mousePos.x,
+            cellEnd - mousePos.x,
+            cellStart - mousePos.y,
+            cellEnd - mousePos.y];
 
 
     if (st.animate || st.iterative) {
