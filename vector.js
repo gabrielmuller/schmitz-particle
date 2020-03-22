@@ -51,6 +51,20 @@ class Vector {
         return Math.sqrt(this.x*this.x + this.y*this.y);
     }
 
+    distance(v) {
+        return this.sub(v).length();
+    }
+
+    distanceToPlane(point, normal) {
+        let d = point.dot(normal);
+        return this.dot(normal) - d;
+    }
+
+    vectorTo(v) {
+        return v.dot(this.normal) - this.d;
+    }
+
+
     normalized() {
         return this.div(this.length());
     }
