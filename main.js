@@ -1,10 +1,17 @@
 "use strict"
 
+const centroidColor = 'crimson';
+const forceColor = 'darkgreen';
+const normalColor = 'darkslateblue';
+const gridColor = 'grey';
+
 const canvas = document.getElementById("display");
 const ctx = canvas.getContext('2d');
 
 const headAngle = 0.6;
 const strength = Math.sqrt(0.05);
+
+
 
 let g = {
     animating: false,
@@ -17,6 +24,12 @@ let g = {
     cellSize: 0,
     cellStart: 0,
     cellEnd: 0,
+
+    selection: null,
+    selectionIndex: 0,
+    dragging: 0,
+    toRemove: -1,
+
     corners: [],
     mousePos: new Vector(0, 0),
 
@@ -85,16 +98,16 @@ function arrow(ctx, origin, direction, lengthRatio = 1)  {
 }
 
 function normalPlane(ctx, origin, normal, showPlane=true) {
-    ctx.strokeStyle = 'darkslateblue';
-    ctx.fillStyle = 'darkslateblue';
+    ctx.strokeStyle = normalColor;
+    ctx.fillStyle = normalColor;
     circle(ctx, origin, g.S * 0.01);
     ctx.lineWidth = g.S * 0.006;
     arrow(ctx, origin, normal.mul(g.normalLength));
 
     if (!showPlane) return;
 
-    ctx.strokeStyle = '#2222FF90';
-    ctx.fillStyle = '#2222FF40';
+    ctx.strokeStyle = normalColor;
+    ctx.fillStyle = normalColor;
     ctx.lineWidth = g.S * 0.004;
 
     ctx.beginPath();
@@ -114,6 +127,8 @@ class Hermite {
         this.origin = origin;
         this.normal = new Vector(Math.random() - 0.5, Math.random() - 0.5);
         this.axis = axis;
+        this.userDefined = false;
+        this.enabled = true;
     }
 
     get normal() { return this._normal };
@@ -180,16 +195,36 @@ function getMousePos(canvas, evt) {
     );
 }
 
-document.onmousemove = function (e) {
+window.onmousemove = (e) => {
     g.mousePos = getMousePos(canvas, e);
-};
+    redraw();
+}
+
+window.onmousedown = () => {
+    if (g.toRemove > 0) {
+        g.input[g.toRemove].enabled = false;
+        return;
+    }
+    if (!g.selection) return;
+    g.dragging = true;
+    let hermite = g.input[g.selectionIndex];
+    let normalizedSelection = g.selection.sub(new Vector(g.cellStart, g.cellStart)).div(g.cellSize);
+    hermite.t = hermite.origin.distance(normalizedSelection);
+    hermite.update();
+    hermite.userDefined = true;
+    hermite.enabled = true;
+}
+
+window.onmouseup = () => {
+    g.dragging = false;
+}
 
 function draw() {
     g.animating = true;
     let st = steps[g.step];
 
     ctx.clearRect(0, 0, g.S, g.S);
-    ctx.strokeStyle = '#888';
+    ctx.strokeStyle = gridColor;
     ctx.lineWidth = Math.round(g.S * 0.005);
     ctx.beginPath();
 
@@ -207,38 +242,38 @@ function draw() {
 
     ctx.stroke()
 
+    let enabledInput = g.input.filter((hermite) => hermite.enabled);
+
     if (st.animate) {
-        g.input[0].normal = new Vector(Math.sin(g.elapsed), Math.cos(g.elapsed));
-        g.input[1].normal = new Vector(Math.sin(g.elapsed * 1.618), Math.cos(g.elapsed * 1.618));
-        g.input[2].normal = new Vector(Math.sin(g.elapsed * 1.618 * 0.1), Math.cos(g.elapsed * 1.618 * 0.8));
-        g.input[3].normal = new Vector(Math.sin(g.elapsed * 1.618 * 0.01), Math.cos(g.elapsed * 1.618) * 0.02);
-        g.input[0].t = Math.abs(Math.sin(g.elapsed));
-        g.input[1].t = Math.abs(Math.cos(g.elapsed));
-        g.input[3].t = Math.abs(Math.sin(g.elapsed * 0.1518));
-        g.input[2].t = Math.abs(Math.cos(g.elapsed * 0.4683));
+        enabledInput.forEach((hermite, i) => {
+            if (hermite.userDefined) return;
+            let j = i+1;
+            hermite.normal = new Vector(Math.sin(g.elapsed * 1.618 / j), Math.cos(g.elapsed * 0.01 * j));
+            hermite.t = Math.abs(Math.sin(g.elapsed * 0.183 * j));
+        });
     }
     let center = new Vector(0, 0);
 
-    g.input.forEach((hermite, _) => {
+    enabledInput.forEach((hermite, _) => {
         hermite.update();
         normalPlane(ctx, hermite.pos, hermite.normal, st.plane);
         center = center.add(hermite.pos);
     });
 
-    center = center.div(g.input.length);
+    center = center.div(enabledInput.length);
 
     let partialForces = [];
     for (let i = 0; i < 4; i++) partialForces[i] = new Vector(0, 0);
 
-    ctx.strokeStyle = 'green';
-    ctx.fillStyle = 'green';
+    ctx.strokeStyle = forceColor;
+    ctx.fillStyle = forceColor;
 
     g.corners.forEach((corner, i) => {
         if (st.partial || st.toPlane) {
             circle(ctx, corner, g.S * 0.01);
         }
         ctx.lineWidth = 2;
-        g.input.forEach((hermite, _) => {
+        enabledInput.forEach((hermite, _) => {
             const v = hermite.vectorTo(corner);
             if (st.toPlane) {
                 arrow(ctx, corner, v.mul(-1));
@@ -254,8 +289,8 @@ function draw() {
 
     ctx.lineWidth = 2;
 
-    ctx.strokeStyle = 'crimson';
-    ctx.fillStyle = 'crimson';
+    ctx.strokeStyle = centroidColor;
+    ctx.fillStyle = centroidColor;
 
     if (st.centroid) {
         circle(ctx, center, g.S * 0.004);
@@ -296,27 +331,45 @@ function draw() {
         ctx.stroke();
     }
 
-    let selection = null;
-    let minDistance = g.S * 0.15;
+    ctx.fillStyle = normalColor;
 
-    g.corners.forEach((corner, i) => {
-        let normal = g.input[i].axis.perpendicular();
-        let distance = g.mousePos.distanceToPlane(g.corners[i], normal);
+    if (g.dragging) {
+        g.input[g.selectionIndex].normal = g.mousePos.sub(g.selection);
+    } else {
+        let selection = null;
+        let index = -1;
+        let minDistance = g.S * 0.15;
+        g.toRemove = -1;
 
-        if (Math.abs(distance) < minDistance) {
-            minDistance = distance;
-            selection = g.mousePos.sub(normal.mul(distance));
+        g.corners.forEach((corner, i) => {
+            let normal = g.input[i].axis.perpendicular();
+            let distance = g.mousePos.distanceToPlane(g.corners[i], normal);
+
+            if (Math.abs(distance) < minDistance) {
+                minDistance = distance;
+                selection = g.mousePos.sub(normal.mul(distance));
+                index = i;
+            }
+        });
+
+        if (selection) {
+            let clamped = selection.clamp(g.cellStart, g.cellEnd);
+            let hermite = g.input[index]
+            if (hermite.enabled && g.mousePos.distance(hermite.pos) / g.cellSize < 0.06) {
+                ctx.fillStyle = 'red';
+                clamped = hermite.pos;
+                g.toRemove = index;
+            }
+            if (selection.distance(clamped) < g.S * 0.1) {
+                circle(ctx, clamped, g.S * 0.01);
+                g.selection = clamped;
+                g.selectionIndex = index;
+            }
         }
-    });
 
-    if (selection) {
-        let clamped = selection.clamp(g.cellStart, g.cellEnd);
-        if (selection.distance(clamped) < g.S * 0.1) {
-            circle(ctx, clamped, g.S * 0.01);
-        }
     }
 
-    if (st.animate || st.iterative) {
+    if (st.animate || st.iterative || g.dragging) {
         g.elapsed += 0.005;
         window.requestAnimationFrame(draw);
     } else {
