@@ -13,8 +13,9 @@ body {
 }
 
 
-h1, h2 {
+h1 {
     font-family: Georgia, serif;
+    font-size: 1.6em;
 }
 
 .step {
@@ -26,9 +27,18 @@ h1, h2, strong {
 }
 
 #text {
-    margin: 3em;
+    margin: 0 3em 3em 3em;
     flex-shrink: 1;
     flex-basis: 30em;
+}
+
+a {
+    text-decoration: none;
+    color: crimson;
+}
+
+a:visited {
+    color: darkred;
 }
 
 canvas {

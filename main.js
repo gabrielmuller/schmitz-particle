@@ -9,7 +9,7 @@ const canvas = document.getElementById("display");
 const ctx = canvas.getContext('2d');
 
 const headAngle = 0.6;
-const strength = Math.sqrt(0.05);
+const strength = Math.sqrt(0.15);
 
 
 
@@ -122,13 +122,13 @@ function normalPlane(ctx, origin, normal, showPlane=true) {
 
 
 class Hermite {
-    constructor(origin, axis) {
+    constructor(origin, axis, enabled) {
         this.t = 0;
         this.origin = origin;
         this.normal = new Vector(Math.random() - 0.5, Math.random() - 0.5);
         this.axis = axis;
         this.userDefined = false;
-        this.enabled = true;
+        this.enabled = enabled;
     }
 
     get normal() { return this._normal };
@@ -158,10 +158,10 @@ class Hermite {
 }
 
 g.input = [
-    new Hermite(new Vector(0, 0), new Vector(0, 1)),
-    new Hermite(new Vector(0, 1), new Vector(1, 0)),
-    new Hermite(new Vector(1, 0), new Vector(-1, 0)),
-    new Hermite(new Vector(1, 1), new Vector(0, -1)),
+    new Hermite(new Vector(0, 0), new Vector(0, 1), true),
+    new Hermite(new Vector(0, 1), new Vector(1, 0), true),
+    new Hermite(new Vector(1, 0), new Vector(-1, 0), true),
+    new Hermite(new Vector(1, 1), new Vector(0, -1), false),
 ];
 
 resize();
@@ -201,7 +201,7 @@ window.onmousemove = (e) => {
 }
 
 window.onmousedown = () => {
-    if (g.toRemove > 0) {
+    if (g.toRemove >= 0) {
         g.input[g.toRemove].enabled = false;
         return;
     }
@@ -248,8 +248,9 @@ function draw() {
         enabledInput.forEach((hermite, i) => {
             if (hermite.userDefined) return;
             let j = i+1;
-            hermite.normal = new Vector(Math.sin(g.elapsed * 1.618 / j), Math.cos(g.elapsed * 0.01 * j));
-            hermite.t = Math.abs(Math.sin(g.elapsed * 0.183 * j));
+            let elapsed = g.elapsed + 1;
+            hermite.normal = new Vector(Math.sin(elapsed * 1.618 / j), Math.cos(elapsed * 0.01 * j));
+            hermite.t = Math.abs(Math.sin(elapsed * 0.183 * j));
         });
     }
     let center = new Vector(0, 0);
@@ -313,9 +314,10 @@ function draw() {
 
         arrow(ctx, center, force, 0.5);
 
+        if (force.length() < 0.1) break;
+
         center = center.add(force);
         center = center.clamp(g.cellStart, g.cellEnd); 
-        circle(ctx, center, g.S * 0.004);
     }
 
     if (st.interp) {
@@ -330,6 +332,8 @@ function draw() {
 
         ctx.stroke();
     }
+
+    circle(ctx, center, g.S * 0.004);
 
     ctx.fillStyle = normalColor;
 
@@ -355,7 +359,11 @@ function draw() {
         if (selection) {
             let clamped = selection.clamp(g.cellStart, g.cellEnd);
             let hermite = g.input[index]
-            if (hermite.enabled && g.mousePos.distance(hermite.pos) / g.cellSize < 0.06) {
+            if (enabledInput.length > 2 && 
+                hermite.enabled && 
+                g.mousePos.distance(hermite.pos) / g.cellSize < 0.06
+                ) {
+
                 ctx.fillStyle = 'red';
                 clamped = hermite.pos;
                 g.toRemove = index;
@@ -381,5 +389,6 @@ function draw() {
 function redraw() { if (!g.animating) draw() };
 
 resize();
+updateStepFromURL();
 window.onresize = resize;
 window.onpopstate = updateStepFromURL;
