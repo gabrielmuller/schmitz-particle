@@ -164,6 +164,8 @@ g.input = [
     new Hermite(new Vector(1, 1), new Vector(0, -1), false),
 ];
 
+g.enabledInput = () => g.input.filter((hermite) => hermite.enabled);
+
 resize();
 
 function changeStep(newStep) {
@@ -190,33 +192,99 @@ function updateStepFromURL() {
 function getMousePos(canvas, evt) {
     var rect = canvas.getBoundingClientRect();
     return new Vector(
-        evt.clientX - rect.left,
-        evt.clientY - rect.top
+        (evt.clientX || evt.targetTouches[0].pageX) - rect.left,
+        (evt.clientY || evt.targetTouches[0].pageY) - rect.top
     );
 }
 
 window.onmousemove = (e) => {
+    if (g.touch) return;
     g.mousePos = getMousePos(canvas, e);
+    updateSelection();
     redraw();
 }
 
-window.onmousedown = () => {
-    if (g.toRemove >= 0) {
-        g.input[g.toRemove].enabled = false;
-        return;
+window.ontouchmove = (e) => {
+    g.mousePos = getMousePos(canvas, e);
+    if (g.dragging) { 
+        redraw();
     }
-    if (!g.selection) return;
-    g.dragging = true;
-    let hermite = g.input[g.selectionIndex];
-    let normalizedSelection = g.selection.sub(new Vector(g.cellStart, g.cellStart)).div(g.cellSize);
-    hermite.t = hermite.origin.distance(normalizedSelection);
-    hermite.update();
-    hermite.userDefined = true;
-    hermite.enabled = true;
 }
 
+window.onmousedown = () => {
+    if (g.touch) return;
+    startDrag();
+}
+
+function startDrag() {
+    if (g.toRemove >= 0) {
+        g.input[g.toRemove].enabled = false;
+        g.toRemove = -1;
+    } else if (g.selection) {
+        g.dragging = true;
+        let hermite = g.input[g.selectionIndex];
+        let normalizedSelection = g.selection.sub(new Vector(g.cellStart, g.cellStart)).div(g.cellSize);
+        hermite.t = hermite.origin.distance(normalizedSelection);
+        hermite.update();
+        hermite.userDefined = true;
+        hermite.enabled = true;
+        console.log("mouse down");
+    }
+    redraw();
+}
+
+function endDrag() { g.dragging = false; }
+
+window.ontouchstart = (e) => {
+    g.touch = true;
+    g.mousePos = getMousePos(canvas, e);
+    updateSelection();
+    if (g.toRemove >= 0) g.selection = null;
+    startDrag();
+}
+
+
+window.ontouchcancel = window.ontouchend = endDrag;
 window.onmouseup = () => {
-    g.dragging = false;
+    if (g.touch) return;
+     endDrag();
+}
+
+function updateSelection() {
+    if (g.dragging) return;
+    let selection = null;
+    let index = -1;
+    let minDistance = g.S * 0.15;
+    let enabledInput = g.enabledInput();
+    g.toRemove = -1;
+
+    g.corners.forEach((corner, i) => {
+        let normal = g.input[i].axis.perpendicular();
+        let distance = g.mousePos.distanceToPlane(g.corners[i], normal);
+
+        if (Math.abs(distance) < minDistance) {
+            minDistance = distance;
+            selection = g.mousePos.sub(normal.mul(distance));
+            index = i;
+        }
+    });
+
+    if (selection) {
+        let clamped = selection.clamp(g.cellStart, g.cellEnd);
+        let hermite = g.input[index]
+        if (enabledInput.length > 2 && 
+            hermite.enabled && 
+            g.mousePos.distance(hermite.pos) / g.cellSize < 0.06
+            ) {
+
+            clamped = hermite.pos;
+            g.toRemove = index;
+        }
+        if (selection.distance(clamped) < g.S * 0.1) {
+            g.selection = clamped;
+            g.selectionIndex = index;
+        }
+    }
 }
 
 function draw() {
@@ -242,7 +310,7 @@ function draw() {
 
     ctx.stroke()
 
-    let enabledInput = g.input.filter((hermite) => hermite.enabled);
+    let enabledInput = g.enabledInput();
 
     if (st.animate) {
         enabledInput.forEach((hermite, i) => {
@@ -333,48 +401,19 @@ function draw() {
         ctx.stroke();
     }
 
-    circle(ctx, center, g.S * 0.004);
+    if (forceCount > 0) circle(ctx, center, g.S * 0.004);
 
     ctx.fillStyle = normalColor;
 
     if (g.dragging) {
         g.input[g.selectionIndex].normal = g.mousePos.sub(g.selection);
     } else {
-        let selection = null;
-        let index = -1;
-        let minDistance = g.S * 0.15;
-        g.toRemove = -1;
+        let drawCircle = true;
+        if (g.toRemove >= 0) ctx.fillStyle = 'red';
+        else if (g.selection) ctx.fillStyle = normalColor;
+        else drawCircle = false;
 
-        g.corners.forEach((corner, i) => {
-            let normal = g.input[i].axis.perpendicular();
-            let distance = g.mousePos.distanceToPlane(g.corners[i], normal);
-
-            if (Math.abs(distance) < minDistance) {
-                minDistance = distance;
-                selection = g.mousePos.sub(normal.mul(distance));
-                index = i;
-            }
-        });
-
-        if (selection) {
-            let clamped = selection.clamp(g.cellStart, g.cellEnd);
-            let hermite = g.input[index]
-            if (enabledInput.length > 2 && 
-                hermite.enabled && 
-                g.mousePos.distance(hermite.pos) / g.cellSize < 0.06
-                ) {
-
-                ctx.fillStyle = 'red';
-                clamped = hermite.pos;
-                g.toRemove = index;
-            }
-            if (selection.distance(clamped) < g.S * 0.1) {
-                circle(ctx, clamped, g.S * 0.01);
-                g.selection = clamped;
-                g.selectionIndex = index;
-            }
-        }
-
+        if (drawCircle) circle(ctx, g.selection, g.S * 0.01);
     }
 
     if (st.animate || st.iterative || g.dragging) {
