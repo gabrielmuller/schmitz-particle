@@ -1,9 +1,9 @@
 "use strict"
 
 const centroidColor = 'crimson';
-const forceColor = 'darkgreen';
-const normalColor = 'darkslateblue';
-const gridColor = 'grey';
+const forceColor = 'darkolivegreen';
+const normalColor = 'dodgerblue';
+const gridColor = 'gray';
 
 const canvas = document.getElementById("display");
 const ctx = canvas.getContext('2d');
